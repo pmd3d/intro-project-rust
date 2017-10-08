@@ -1,0 +1,9 @@
+[package]
+name = "helloworld"
+version = "0.1.0"
+authors = ["j"]
+
+[dependencies]
+sdl2 = "0.30"
+iron = "0.5.*"
+router = "*"
