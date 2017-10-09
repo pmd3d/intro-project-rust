@@ -8,3 +8,10 @@ sdl2 = "0.30"
 iron = "0.5.*"
 router = "*"
 url = "*"
+rocket = "0.3.3"
+rocket_codegen = "0.3.3"
+
+[dependencies.rocket_contrib]
+version = "*"
+default-features = false
+features = ["handlebars_templates", "tera_templates"]

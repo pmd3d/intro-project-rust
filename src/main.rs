@@ -1,9 +1,10 @@
-// todo: read in index.html
+#![feature(plugin)]
+#![plugin(rocket_codegen)]
+
 // todo: rustfmt
-// todo: call start game from start link
 extern crate sdl2;
-extern crate iron;
-extern crate router;
+extern crate rocket;
+extern crate rocket_contrib;
 extern crate url;
 
 mod url_open;
@@ -14,38 +15,29 @@ use sdl2::keyboard::Keycode;
 use sdl2::rect::Point;
 use sdl2::rect::Rect;
 use std::time::Duration;
-use iron::prelude::*;
-use iron::status;
-use router::Router;
 use std::path::Path;
+use std::fs::File;
+use std::io::Read;
 use url::Url;
 use url_open::UrlOpen;
-
+use std::thread;
+use rocket_contrib::Template;
 
 static APP_NAME: &'static str =  "Intro Project Rust";
 
-pub fn main() {
-    let mut router = Router::new();
 
-    router.get("/", handler, "index");
-    router.get("/:query", handler, "query");
+#[get("/")]
+fn index() -> Template {
+   let context = "todo";
+   Template::render("index", &context)
+}
 
-    // TODO: this need to change in case port is taken...
-    // more error handling too.
-    let _server = Iron::new(router).http("127.0.0.1:3000").unwrap();
-
-    fn handler(req: &mut Request) -> IronResult<Response> {
-        let ref query = req.extensions.get::<Router>().unwrap().find("query").unwrap_or("/");
-
-        if (query == "start") {
-        }
-        else {
-           query = 
-        }
-        Ok(Response::with((status::Ok, *query)))
-    }
-
-    Url::parse("http://127.0.0.1:3000/").unwrap().open();
+#[get("/start")]
+fn start() -> Template {
+   let context = "todo";
+   start_game();
+   Template::render("index", &context)
+}
 
     fn start_game() {
         let sdl_context = sdl2::init().unwrap();
@@ -95,4 +87,18 @@ pub fn main() {
            canvas.present();
        }
    }
+
+
+pub fn main() {
+
+    thread::spawn(move || { 
+        rocket::ignite()
+            .mount("/", routes![index, start])
+            .attach(Template::fairing())
+            .launch()
+    });
+
+    // TODO: this need to change in case port is taken...
+    // more error handling too.
+    Url::parse("http://127.0.0.1:8000/").unwrap().open();
 }
