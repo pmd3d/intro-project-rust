@@ -7,3 +7,4 @@ authors = ["j"]
 sdl2 = "0.30"
 iron = "0.5.*"
 router = "*"
+url = "*"
