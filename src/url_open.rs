@@ -40,21 +40,29 @@ pub fn open(url: &Url) {
     use std::ptr;
 
     unsafe {
-        shell32::ShellExecuteA(ptr::null_mut(),
-                               CString::new("open").unwrap().as_ptr(),
-                               CString::new(url.to_string().replace("\n", "%0A")).unwrap().as_ptr(),
-                               ptr::null(),
-                               ptr::null(),
-                               winapi::SW_SHOWNORMAL);
+        shell32::ShellExecuteA(
+            ptr::null_mut(),
+            CString::new("open").unwrap().as_ptr(),
+            CString::new(url.to_string().replace("\n", "%0A"))
+                .unwrap()
+                .as_ptr(),
+            ptr::null(),
+            ptr::null(),
+            winapi::SW_SHOWNORMAL,
+        );
     }
 }
 
 #[cfg(target_os = "macos")]
 pub fn open(url: &Url) {
-    let _ = std::process::Command::new("open").arg(url.to_string()).output();
+    let _ = std::process::Command::new("open")
+        .arg(url.to_string())
+        .output();
 }
 
 #[cfg(target_os = "linux")]
 pub fn open(url: &Url) {
-    let _ = std::process::Command::new("xdg-open").arg(url.to_string()).output();
+    let _ = std::process::Command::new("xdg-open")
+        .arg(url.to_string())
+        .output();
 }

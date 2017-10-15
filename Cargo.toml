@@ -4,12 +4,17 @@ version = "0.1.0"
 authors = ["j"]
 
 [dependencies]
-sdl2 = "0.30"
 iron = "0.5.*"
 router = "*"
 url = "*"
 rocket = "0.3.3"
 rocket_codegen = "0.3.3"
+c_vec = "1.0.*"
+
+[dependencies.sdl2]
+version = "0.30"
+default-features = false
+features = ["gfx"]
 
 [dependencies.rocket_contrib]
 version = "*"
