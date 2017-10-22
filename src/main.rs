@@ -8,7 +8,6 @@ extern crate sdl2;
 extern crate url;
 
 mod url_open;
-mod math;
 
 /*
  * #![recursion_limit = "1024"]
@@ -28,10 +27,7 @@ use sdl2::pixels;
 use sdl2::pixels::Color;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use sdl2::rect::Point;
-use sdl2::rect::Rect;
 use std::time::Duration;
-use std::path::Path;
 //use std::fs::File;
 //use std::io::Read;
 use url::Url;
@@ -43,6 +39,7 @@ use sdl2::render::Canvas;
 
 static APP_NAME: &'static str = "Intro Project Rust";
 
+const PI: f64 = 3.141592;
 
 #[get("/")]
 fn index() -> Template {
@@ -64,7 +61,10 @@ trait FieldConstants {
     const YMAX: i16 = 500;
 }
 
-struct FieldState {}
+struct FieldState {
+    foreground : Color,
+    erase_color: Color,
+}
 
 impl FieldConstants for FieldState {}
 
@@ -73,6 +73,8 @@ trait PaddleConstants {
     const WIDTH: i16 = 10;
     const YMIN: i16 = FieldState::YMIN;
     const YMAX: i16 = FieldState::YMAX - PaddleState::HEIGHT;
+    const LEFT: i16 = FieldState::XMIN; 
+    const RIGHT: i16 = FieldState::XMAX;
 }
 
 struct PaddleState {
@@ -83,13 +85,10 @@ struct PaddleState {
 impl PaddleConstants for PaddleState {}
 
 trait BallConstants {
-    const HEIGHT: i16 = 30;
-    const WIDTH: i16 = 30;
+    const RADIUS: f64 = 10.0;
 }
 
 struct BallState {
-    color: Color,
-    erase_color: Color,
     x: i16,
     y: i16,
     dx: i16,
@@ -99,42 +98,69 @@ struct BallState {
 impl BallConstants for BallState {}
 
 struct GameState {
-    paddle: PaddleState,
+    paddle: [PaddleState; 2],
     ball: BallState 
 }
 
-fn render() {
-}
-
-fn draw_ball(canvas: &Canvas<sdl2::video::Window>, cx: i16, cy: i16, color: &pixels::Color) {
-    // TODO: put in game constants struct...
-    let radius = 50.0;
+fn draw_ball(canvas: &Canvas<sdl2::video::Window>, ball: &BallState, color: &pixels::Color) {
+    let cx = ball.x;
+    let cy = ball.y;
     let mut sector = 0.0;
     // draw ball as set of triangles...
     // TODO: make this a bitmap and blt it later...
     // maybe have a spin animation?
     for _ in 0..36 {
         let angle1 : f64 = sector;
-        sector += 180.0 / 18.0 * 3.141592 / 180.0;
+        sector += 180.0 / 18.0 * PI / 180.0;
         let angle2 : f64 = sector;
-        let x1 = cx + (radius * angle1.cos()) as i16;
-        let y1 = cy + (radius * angle1.sin()) as i16;
-        let x2 = cx + (radius * angle2.cos()) as i16;
-        let y2 = cy + (radius * angle2.sin()) as i16;
+        let x1 = cx + (BallState::RADIUS * angle1.cos()) as i16;
+        let y1 = cy + (BallState::RADIUS * angle1.sin()) as i16;
+        let x2 = cx + (BallState::RADIUS * angle2.cos()) as i16;
+        let y2 = cy + (BallState::RADIUS * angle2.sin()) as i16;
         canvas.filled_trigon(x1, y1, cx, cy, x2, y2, *color).unwrap();
     }
 }
 
-fn update_game(state: &mut GameState) {
-    let new_ball_x = state.ball.x + state.ball.dx;
+fn draw_paddle(canvas: &Canvas<sdl2::video::Window>, x:i16, paddle: &PaddleState, color: &pixels::Color) {
+    canvas.box_(x, paddle.y, x+PaddleState::WIDTH, paddle.y+PaddleState::HEIGHT, *color).unwrap();
+}
 
-    if new_ball_x >= FieldState::XMIN && new_ball_x <= FieldState::XMAX {
-        state.ball.x = new_ball_x;
-    }
-    
+fn update_game(state: &GameState) -> GameState {
+    let new_ball_x = state.ball.x + state.ball.dx;
     let new_ball_y = state.ball.y + state.ball.dy;
-    if new_ball_y >= FieldState::YMIN && new_ball_y <= FieldState::YMAX {
-        state.ball.y = new_ball_y;
+
+    GameState {
+        paddle: [
+            PaddleState {
+                dy: state.paddle[0].dy,
+                y: state.paddle[0].y
+            }, 
+            PaddleState {
+                dy: state.paddle[1].dy,
+                y: state.paddle[1].y
+            }],
+        ball: BallState {
+            x : if new_ball_x >= FieldState::XMIN && new_ball_x <= FieldState::XMAX {
+                    new_ball_x
+                } else {
+                    state.ball.x
+                },
+            y : if new_ball_y >= FieldState::YMIN && new_ball_y <= FieldState::YMAX {
+                    new_ball_y
+                } else {
+                    state.ball.y
+                },
+            dx: if new_ball_x == FieldState::XMIN || new_ball_x == FieldState::XMAX {
+                    -state.ball.dx
+                } else {
+                     state.ball.dx
+                },
+            dy: if new_ball_y == FieldState::YMIN || new_ball_y == FieldState::YMAX {
+                     -state.ball.dy
+                } else {
+                     state.ball.dy
+                }
+        }
     }
 }
 
@@ -154,40 +180,29 @@ fn start_game() {
 
     let mut canvas = window.into_canvas().build().unwrap();
 
-    let texture_creator = canvas.texture_creator();
-
-    let temp_surface = sdl2::surface::Surface::load_bmp(Path::new("./assets/animate.bmp")).unwrap();
-
-    let texture = texture_creator
-        .create_texture_from_surface(&temp_surface)
-        .unwrap();
-
-    let source_rect = Rect::new(0, 0, 128, 82);
-    let mut dest_rect = Rect::new(0, 0, 128, 82);
-
-    let center = Point::new(320, 240);
-    dest_rect.center_on(center);
-
     let mut event_pump = sdl_context.event_pump().unwrap();
 
     let mut game_state = GameState {
-        paddle: PaddleState {
-            y: 0,
-            dy: 0,
-        },
+        paddle: [
+            PaddleState {
+                y: FieldState::YMAX/2,
+                dy: 0 },
+            PaddleState {
+                y: FieldState::YMAX/2,
+                dy: 0 }
+        ],
         ball:  BallState {
-            color: pixels::Color::RGB(255, 255, 255),
-            erase_color: pixels::Color::RGB(0, 0, 0),
-            x: 100,
-            y: 100,
-            dx: 1,
-            dy: 0
+            x: FieldState::XMAX/2,
+            y: FieldState::YMAX/2,
+            dx: 10,
+            dy: 10
         }
     };
 
-    //const let red = pixels::Color::RGB(255, 0, 0);
-    //const let blue = pixels::Color::RGB(0, 0, 255);
-    //const let black = pixels::Color::RGB(0, 0, 0);
+    let field = FieldState {
+        foreground: pixels::Color::RGB(255, 255, 255),
+        erase_color: pixels::Color::RGB(0, 0, 0)
+    };
 
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -200,26 +215,22 @@ fn start_game() {
                 _ => {}
             }
         }
+        // TODO: adjust this for frame rate...
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
 
         let counter = timer.ticks();
 
-        let cx = 400;
-        let cy = 300;
-        let radius = 300.0;
-        let mut sector = 0.0;
+        draw_ball(&canvas, &game_state.ball, &field.erase_color);
+        draw_paddle(&canvas, PaddleState::LEFT, &game_state.paddle[0], &field.erase_color);
+        draw_paddle(&canvas, PaddleState::RIGHT, &game_state.paddle[1], &field.erase_color);
 
-        let cx = game_state.ball.x;
-        let cy = game_state.ball.y;
+        game_state = update_game(&game_state);
 
-        draw_ball(&canvas, game_state.ball.x, game_state.ball.y, &game_state.ball.erase_color);
-
-        update_game(&mut game_state);
-
-        draw_ball(&canvas, game_state.ball.x, game_state.ball.y, &game_state.ball.color);
+        draw_ball(&canvas, &game_state.ball, &field.foreground);
+        draw_paddle(&canvas, PaddleState::LEFT, &game_state.paddle[0], &field.foreground);
+        draw_paddle(&canvas, PaddleState::RIGHT, &game_state.paddle[1], &field.foreground);
 
         canvas.present();
-
     }
 }
 
@@ -232,7 +243,7 @@ pub fn main() {
             .launch()
     });
 
-    // TODO: this need to change in case port is taken...
+    // TODO: this needs to change in case port is taken...
     // more error handling too.
     Url::parse("http://127.0.0.1:8000/").unwrap().open();
 
