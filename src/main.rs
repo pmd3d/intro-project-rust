@@ -59,6 +59,7 @@ trait FieldConstants {
     const XMAX: i16 = 700;
     const YMIN: i16 = 100;
     const YMAX: i16 = 500;
+    const BORDERWIDTH: i16 = 10;
 }
 
 struct FieldState {
@@ -71,10 +72,11 @@ impl FieldConstants for FieldState {}
 trait PaddleConstants {
     const HEIGHT: i16 = 100;
     const WIDTH: i16 = 10;
-    const YMIN: i16 = FieldState::YMIN;
-    const YMAX: i16 = FieldState::YMAX - PaddleState::HEIGHT;
-    const LEFT: i16 = FieldState::XMIN; 
-    const RIGHT: i16 = FieldState::XMAX;
+    const YMIN: i16 = FieldState::YMIN + 1;
+    const YMAX: i16 = FieldState::YMAX - PaddleState::HEIGHT - 1;
+    const LEFT: i16 = FieldState::XMIN + 4 * PaddleState::WIDTH; 
+    const RIGHT: i16 = FieldState::XMAX - 5 * PaddleState::WIDTH;
+    const DELTA: i16 = 10;
 }
 
 struct PaddleState {
@@ -86,13 +88,20 @@ impl PaddleConstants for PaddleState {}
 
 trait BallConstants {
     const RADIUS: f64 = 10.0;
+    const XMIN: i16 = FieldState::XMIN + 10;
+    const XMAX: i16 = FieldState::XMAX - 10;
+    const YMAX: i16 = FieldState::YMAX - 10;
+    const YMIN: i16 = FieldState::YMIN + 10;
+    const INITIALDX: f64 = 1.0;
+    const INITIALDY: f64 = 1.0;
+    const ACCELERATION: f64 = 2.0;
 }
 
 struct BallState {
     x: i16,
     y: i16,
-    dx: i16,
-    dy: i16
+    dx: f64, 
+    dy: f64
 }
 
 impl BallConstants for BallState {}
@@ -125,41 +134,78 @@ fn draw_paddle(canvas: &Canvas<sdl2::video::Window>, x:i16, paddle: &PaddleState
     canvas.box_(x, paddle.y, x+PaddleState::WIDTH, paddle.y+PaddleState::HEIGHT, *color).unwrap();
 }
 
-fn update_game(state: &GameState) -> GameState {
-    let new_ball_x = state.ball.x + state.ball.dx;
-    let new_ball_y = state.ball.y + state.ball.dy;
+fn draw_field(canvas: &Canvas<sdl2::video::Window>, field: &FieldState) {
+    let lx = FieldState::XMIN - FieldState::BORDERWIDTH;
+    let rx = FieldState::XMAX + FieldState::BORDERWIDTH;
+    let uy = FieldState::YMIN - FieldState::BORDERWIDTH;
+    let by = FieldState::YMAX + FieldState::BORDERWIDTH;
+
+    canvas.box_(lx, uy, rx, FieldState::YMIN, field.foreground).unwrap();
+    canvas.box_(FieldState::XMAX, uy, rx, by, field.foreground).unwrap();
+    canvas.box_(lx, FieldState::YMAX, rx, by, field.foreground).unwrap();
+    canvas.box_(lx, uy, FieldState::XMIN, by, field.foreground).unwrap();
+}
+
+fn update_game(state: &GameState, new_paddle_dy : i16) -> GameState {
+    let new_ball_x = state.ball.x + state.ball.dx as i16;
+    let new_ball_y = state.ball.y + state.ball.dy as i16;
+
+    let new_paddle_y = state.paddle[0].y + state.paddle[0].dy;
+    // todo: fix so LEFT and RIGHT are enumerable...
+    let collision: [bool; 2] = [
+        new_ball_x >= PaddleState::LEFT && new_ball_x <= PaddleState::LEFT + PaddleState::WIDTH &&
+                          new_ball_y >= state.paddle[0].y && new_ball_y <= state.paddle[0].y + PaddleState::HEIGHT,
+        new_ball_x >= PaddleState::RIGHT && new_ball_x <= PaddleState::RIGHT + PaddleState::WIDTH &&
+                          new_ball_y >= state.paddle[1].y && new_ball_y <= state.paddle[1].y + PaddleState::HEIGHT];
 
     GameState {
         paddle: [
             PaddleState {
-                dy: state.paddle[0].dy,
-                y: state.paddle[0].y
+                y: if new_paddle_y >= PaddleState::YMIN && new_paddle_y <= PaddleState::YMAX {
+                       new_paddle_y
+                   } else {
+                       state.paddle[0].y
+                   },
+                dy: if (state.paddle[0].dy == 0 || state.paddle[0].dy == new_paddle_dy) &&
+                       new_paddle_y >= PaddleState::YMIN && new_paddle_y <= PaddleState::YMAX {
+                       new_paddle_dy
+                    } else {
+                       0
+                    }
             }, 
             PaddleState {
                 dy: state.paddle[1].dy,
                 y: state.paddle[1].y
             }],
         ball: BallState {
-            x : if new_ball_x >= FieldState::XMIN && new_ball_x <= FieldState::XMAX {
+            x : if new_ball_x >= BallState::XMIN && new_ball_x <= BallState::XMAX {
                     new_ball_x
                 } else {
                     state.ball.x
                 },
-            y : if new_ball_y >= FieldState::YMIN && new_ball_y <= FieldState::YMAX {
+            y : if new_ball_y >= BallState::YMIN && new_ball_y <= BallState::YMAX {
                     new_ball_y
                 } else {
                     state.ball.y
                 },
-            dx: if new_ball_x == FieldState::XMIN || new_ball_x == FieldState::XMAX {
+            dx: if collision[0] || collision[1] {
+                    -state.ball.dx * BallState::ACCELERATION
+                }
+                else if new_ball_x == BallState::XMIN || new_ball_x == BallState::XMAX {
                     -state.ball.dx
                 } else {
                      state.ball.dx
                 },
-            dy: if new_ball_y == FieldState::YMIN || new_ball_y == FieldState::YMAX {
+            dy: if collision[0] || collision[1] { 
+                     -state.ball.dy * BallState::ACCELERATION
+                }
+                else if new_ball_y == BallState::YMIN || new_ball_y == BallState::YMAX {
                      -state.ball.dy
                 } else {
                      state.ball.dy
                 }
+            // todo: ball hits side of paddle...
+            // todo: bug, log the dy. ball gets stuck on bottom.
         }
     }
 }
@@ -194,15 +240,22 @@ fn start_game() {
         ball:  BallState {
             x: FieldState::XMAX/2,
             y: FieldState::YMAX/2,
-            dx: 10,
-            dy: 10
+            dx: BallState::INITIALDX,
+            dy: BallState::INITIALDY
         }
     };
+
+    let mut new_paddle_dy = 0;
 
     let field = FieldState {
         foreground: pixels::Color::RGB(255, 255, 255),
         erase_color: pixels::Color::RGB(0, 0, 0)
     };
+
+// todo: maybe send over the entire event with timestamp?
+// todo: would be nice if could control with just two keys
+
+    draw_field(&canvas, &field);
 
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -212,19 +265,31 @@ fn start_game() {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => break 'running,
+                Event::KeyDown {
+                    keycode: Some(Keycode::Down),
+                    ..
+                } => new_paddle_dy = PaddleState::DELTA,
+                Event::KeyDown {
+                    keycode: Some(Keycode::Up),
+                    ..
+                } => new_paddle_dy = -PaddleState::DELTA,
+                Event::KeyDown {
+                    keycode: Some(Keycode::Left),
+                    ..
+                } => new_paddle_dy = 0,
                 _ => {}
             }
         }
         // TODO: adjust this for frame rate...
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
 
-        let counter = timer.ticks();
+        let _counter = timer.ticks();
 
         draw_ball(&canvas, &game_state.ball, &field.erase_color);
         draw_paddle(&canvas, PaddleState::LEFT, &game_state.paddle[0], &field.erase_color);
         draw_paddle(&canvas, PaddleState::RIGHT, &game_state.paddle[1], &field.erase_color);
 
-        game_state = update_game(&game_state);
+        game_state = update_game(&game_state, new_paddle_dy);
 
         draw_ball(&canvas, &game_state.ball, &field.foreground);
         draw_paddle(&canvas, PaddleState::LEFT, &game_state.paddle[0], &field.foreground);
